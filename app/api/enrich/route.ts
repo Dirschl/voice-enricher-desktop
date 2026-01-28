@@ -164,7 +164,17 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ result, format });
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : "Enrich error";
+    const err = e instanceof Error ? e : new Error(String(e));
+    console.error("API enrich - error:", err.message, err.cause || "");
+    if (err.stack) console.error("API enrich - stack:", err.stack);
+    // Hilfreiche Meldung bei typischen Fehlern
+    let message = err.message;
+    if (typeof message === "string" && (message.includes("ECONNREFUSED") || message.includes("fetch failed") || message.toLowerCase().includes("network"))) {
+      message = "Ollama nicht erreichbar. Bitte starte Ollama (z.B. im Terminal: ollama serve) und prüfe die Einstellungen (Ollama-URL, Modell).";
+    }
+    if (typeof message === "string" && message.startsWith("Ollama error:") && message.includes("404")) {
+      message = "Modell nicht gefunden. In Einstellungen ein installiertes Modell wählen (z.B. ollama pull llama3.2:3b).";
+    }
     return new NextResponse(message, { status: 500 });
   }
 }

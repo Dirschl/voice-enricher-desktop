@@ -427,6 +427,12 @@ html, body {
   box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4);
 }
 
+.record-btn.live.processing {
+  opacity: 0.85;
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
 .record-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -1560,6 +1566,52 @@ code {
   background: var(--bg-elevated);
   padding: 2px 6px;
   border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.segment-progress {
+  flex: 1;
+  min-width: 60px;
+  max-width: 140px;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.segment-progress::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+}
+
+.segment-progress::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: none;
+}
+
+.segment-progress:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.segment-progress:disabled::-webkit-slider-thumb {
+  cursor: default;
+}
+
+.segment-progress:disabled::-moz-range-thumb {
+  cursor: default;
 }
 
 .uncertain-badge {

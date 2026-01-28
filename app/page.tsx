@@ -25,6 +25,8 @@ interface CustomPrompt {
 type Settings = {
   sttProvider: SttProvider;
   whisperModel: string;
+  /** OpenAI API Key für Whisper API (Spracherkennung). Getrennt vom LLM-API-Key. */
+  whisperApiKey?: string;
   llmProvider: LlmProvider;
   llmModel: string;
   llmApiKey?: string;
@@ -200,6 +202,10 @@ export default function Home() {
   const transcriptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const cursorPositionRef = useRef<{ start: number; end: number } | null>(null);
   
+  // Ref for segments-view, um bei neuen Segmenten nach unten zu scrollen
+  const segmentsViewRef = useRef<HTMLDivElement | null>(null);
+  const transcriptLengthPrevRef = useRef<number>(0);
+  
   // Ref to store the actual text value (preserves leading/trailing spaces)
   const transcriptValueRef = useRef<string>("");
   
@@ -218,6 +224,11 @@ export default function Home() {
     audioFilePath: string | null;
   }[]>([]);
   const isTranscribingRef = useRef(false);
+  
+  // Live: "Verarbeitung" state after Stop until queue is empty
+  const [isProcessingAfterLiveStop, setIsProcessingAfterLiveStop] = useState(false);
+  const isProcessingAfterLiveStopRef = useRef(false);
+  const liveProcessingTotalRef = useRef(0);
   
   // Ref to track current project (for use in async functions)
   const currentProjectRef = useRef<Project | null>(null);
@@ -333,6 +344,18 @@ export default function Home() {
     return new Float32Array(bytes.buffer);
   }
 
+  // Dauer aus Audio-Blob (z.B. für Whisper-API-Pfad, der keine Länge zurückgibt)
+  async function getAudioDurationFromBlob(blob: Blob): Promise<number> {
+    const ctx = new AudioContext();
+    try {
+      const ab = await blob.arrayBuffer();
+      const buf = await ctx.decodeAudioData(ab);
+      return buf.duration;
+    } finally {
+      await ctx.close();
+    }
+  }
+
   // Non-speech tags that can be filtered
   const nonSpeechTagPatterns = useMemo(() => [
     // Generic catch-all for square brackets [anything] - catches [Musik], [Aufregung], [Schreien], etc.
@@ -379,6 +402,29 @@ export default function Home() {
     return filtered.replace(/\s+/g, " ").trim();
   }, [nonSpeechTagPatterns]);
 
+  // Erklärung für rote Markierung (isUncertain) – gleiche Heuristiken wie bei der Transkription
+  function getUncertainTooltip(segment: TranscriptSegment): string {
+    if (!segment.isUncertain) return "Unsichere Erkennung";
+    const text = segment.text || "";
+    const without = filterNonSpeechTags(text);
+    const wordCount = without ? without.split(/\s+/).filter(Boolean).length : 0;
+    const duration = Math.max(0, (segment.endTime || 0) - (segment.startTime || 0));
+    const hasRepeatedChars = /(.)\1{3,}/.test(without || "");
+    const hasEllipsis = (without || "").includes("...");
+    const tooFewWordsForDuration = wordCount <= 2 && duration > 3;
+    const hasActualSpeech = !!(without && without.length >= 2);
+
+    const reasons: string[] = [];
+    if (!hasActualSpeech) {
+      reasons.push("Kaum oder kein erkannter Sprachinhalt.");
+    } else {
+      if (tooFewWordsForDuration) reasons.push("Nur wenige Wörter für die Aufnahmedauer – Transkription könnte unvollständig sein.");
+      if (hasEllipsis) reasons.push("Pausen oder Abbrüche (\"…\") in der Erkennung.");
+      if (hasRepeatedChars) reasons.push("Wiederholte Zeichen (z.B. Dehnungen) – Erkennung möglicherweise unsicher.");
+    }
+    return reasons.length > 0 ? reasons.join(" ") : "Unsichere Erkennung – bitte prüfen.";
+  }
+
   // Displayed transcript (filtered if showNonSpeechTags is false)
   // Use preserveWhitespace=true to allow editing at start/end
   const displayedTranscript = useMemo(() => {
@@ -410,33 +456,38 @@ export default function Home() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recogRef = useRef<any>(null);
 
+  const defaultSettings: Settings = {
+    sttProvider: "whisper-local",
+    whisperModel: "Xenova/whisper-base",
+    whisperApiKey: "",
+    llmProvider: "ollama",
+    llmModel: "llama3.2:3b",
+    llmApiKey: "",
+    ollamaBaseUrl: "http://127.0.0.1:11434",
+    language: "de-DE",
+    hotkey: "CommandOrControl+Shift+Space",
+    outputFormat: "markdown",
+    prompts: defaultPrompts,
+    customPromptInstructions: "",
+    customPrompts: [],
+    defaultPromptId: "note",
+  };
+
   async function loadSettings() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).desktop?.getSettings) {
+    try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const s = (await (window as any).desktop.getSettings()) as Settings;
-      setSettings(s);
-      if (s.outputFormat) setOutputFormat(s.outputFormat);
-      // Set default prompt if configured
-      if (s.defaultPromptId) {
-        setSelectedPromptId(s.defaultPromptId);
+      if ((window as any).desktop?.getSettings) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const s = (await (window as any).desktop.getSettings()) as Settings;
+        setSettings(s);
+        if (s.outputFormat) setOutputFormat(s.outputFormat);
+        if (s.defaultPromptId) setSelectedPromptId(s.defaultPromptId);
+      } else {
+        setSettings(defaultSettings);
       }
-    } else {
-      setSettings({
-        sttProvider: "whisper-local",
-        whisperModel: "Xenova/whisper-base",
-        llmProvider: "ollama",
-        llmModel: "llama3.2:3b",
-        llmApiKey: "",
-        ollamaBaseUrl: "http://127.0.0.1:11434",
-        language: "de-DE",
-        hotkey: "CommandOrControl+Shift+Space",
-        outputFormat: "markdown",
-        prompts: defaultPrompts,
-        customPromptInstructions: "",
-        customPrompts: [],
-        defaultPromptId: "note",
-      });
+    } catch (e) {
+      console.error("loadSettings failed, using defaults:", e);
+      setSettings(defaultSettings);
     }
   }
 
@@ -444,6 +495,28 @@ export default function Home() {
     loadSettings();
     loadProjects();
   }, []);
+
+  // Bei neuem Segment nach unten scrollen (Live-Modus)
+  useEffect(() => {
+    if (segments.length === 0) return;
+    const el = segmentsViewRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [segments.length]);
+
+  // Bei neuem Transkript-Text nach unten scrollen (Start/Stop: Aufnahme oder Batch)
+  useEffect(() => {
+    const el = transcriptTextareaRef.current;
+    if (!el) return;
+    const prev = transcriptLengthPrevRef.current;
+    transcriptLengthPrevRef.current = transcript.length;
+    if (prev === 0 && transcript.length === 0) return;
+    const shouldScroll = listening || (transcript.length > prev && transcript.length - prev > 20);
+    if (shouldScroll) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [transcript, listening]);
 
   // Project management functions
   async function loadProjects() {
@@ -1379,6 +1452,8 @@ export default function Home() {
     if (transcriptionQueueRef.current.length === 0) return;
     
     isTranscribingRef.current = true;
+    const total = transcriptionQueueRef.current.length;
+    liveProcessingTotalRef.current = total;
     
     while (transcriptionQueueRef.current.length > 0) {
       // IMPORTANT: Yield to event loop BEFORE each transcription
@@ -1386,46 +1461,73 @@ export default function Home() {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       const item = transcriptionQueueRef.current.shift()!;
+      const currentNum = total - transcriptionQueueRef.current.length;
       
       try {
         console.log("processTranscriptionQueue: Processing segment", item.segmentIndex);
         
-        // Convert audio to samples using Web Audio API (client-side)
-        console.log("processTranscriptionQueue: Converting audio for segment", item.segmentIndex);
-        const audioData = await convertAudioToFloat32(item.audioBlob);
-        
-        console.log("processTranscriptionQueue: Converted audio samples:", audioData.length, 
-          "first:", audioData[0]?.toFixed(6),
-          "last:", audioData[audioData.length - 1]?.toFixed(6));
-        
-        if (audioData.length < 8000) {
-          console.log("processTranscriptionQueue: Skipped segment", item.segmentIndex, "(too short after conversion)");
-          continue;
+        const useSttApi = settings?.sttProvider === "whisper-api";
+        let segmentText: string;
+        let audioDuration: number;
+
+        if (useSttApi) {
+          // Whisper-API-Pfad: Dauer aus Blob, dann /api/transcribe
+          if (isProcessingAfterLiveStopRef.current) {
+            setStatus(`Transkribiere (Segment ${currentNum} von ${total})...`);
+          }
+          audioDuration = await getAudioDurationFromBlob(item.audioBlob);
+          if (audioDuration < 0.5) {
+            console.log("processTranscriptionQueue: Skipped segment", item.segmentIndex, "(too short)");
+            continue;
+          }
+          const wk = settings?.whisperApiKey?.trim();
+          if (!wk) {
+            setError("OpenAI API Key für Whisper fehlt. Bitte in Einstellungen → Spracherkennung eintragen.");
+            continue;
+          }
+          const formData = new FormData();
+          formData.append("audio", item.audioBlob, "audio.webm");
+          formData.append("apiKey", wk);
+          formData.append("language", settings?.language?.split("-")[0] || "de");
+          const res = await fetch("/api/transcribe", { method: "POST", body: formData });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({})) as { error?: string };
+            setError(errData.error || "Whisper-API-Fehler");
+            continue;
+          }
+          const data = await res.json() as { transcript?: string };
+          segmentText = (data.transcript || "").trim();
+          console.log("processTranscriptionQueue: API transcript for segment", item.segmentIndex, "length:", segmentText.length);
+        } else {
+          // Lokaler Whisper-Pfad
+          if (isProcessingAfterLiveStopRef.current) {
+            setStatus(`Konvertiere Audio (Segment ${currentNum} von ${total})...`);
+          }
+          console.log("processTranscriptionQueue: Converting audio for segment", item.segmentIndex);
+          const audioData = await convertAudioToFloat32(item.audioBlob);
+          console.log("processTranscriptionQueue: Converted audio samples:", audioData.length, 
+            "first:", audioData[0]?.toFixed(6),
+            "last:", audioData[audioData.length - 1]?.toFixed(6));
+          if (audioData.length < 8000) {
+            console.log("processTranscriptionQueue: Skipped segment", item.segmentIndex, "(too short after conversion)");
+            continue;
+          }
+          audioDuration = audioData.length / 16000;
+          const whisper = await loadWhisperPipeline();
+          if (isProcessingAfterLiveStopRef.current) {
+            setStatus(`Transkribiere (Segment ${currentNum} von ${total})...`);
+          }
+          const language = settings?.language?.split("-")[0] || "german";
+          console.log("processTranscriptionQueue: Transcribing segment", item.segmentIndex, "duration:", audioDuration.toFixed(2), "s");
+          const result = await whisper(audioData, {
+            language,
+            task: "transcribe",
+            return_timestamps: true,
+            chunk_length_s: 30,
+            stride_length_s: 5,
+          });
+          segmentText = (typeof result === "string" ? result : (result as { text?: string }).text || "").trim();
         }
-        
-        const audioDuration = audioData.length / 16000; // seconds
-        
-        // Load Whisper if needed
-        const whisper = await loadWhisperPipeline();
-        
-        // Transcribe with timestamps - from the SAVED audio
-        const language = settings?.language?.split("-")[0] || "german";
-        console.log("processTranscriptionQueue: Transcribing segment", item.segmentIndex, "duration:", audioDuration.toFixed(2), "s");
-        
-        // Use chunking for longer audio to avoid 30-second limit
-        // chunk_length_s: How long each chunk is (max 30s)
-        // stride_length_s: Overlap between chunks to avoid cutting words
-        const result = await whisper(audioData, {
-          language: language,
-          task: "transcribe",
-          return_timestamps: true,
-          chunk_length_s: 30,
-          stride_length_s: 5,
-        });
-        
-        const segmentText = (typeof result === "string" 
-          ? result 
-          : (result as { text?: string }).text || "").trim();
         
         // Skip if completely empty
         if (!segmentText || segmentText.length < 2) {
@@ -1516,19 +1618,11 @@ export default function Home() {
       }
     }
     
-    // Process any remaining audio - ALWAYS process the final segment on stop
-    if (audioChunksRef.current.length > 0 && mediaRecorderRef.current) {
-      console.log("stopLiveMode: Processing final segment with", audioChunksRef.current.length, "chunks");
-      await processLiveSegment(); // Await to ensure it completes
-    } else {
-      // No chunks to process - stop the MediaRecorder if running
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-        try {
-          mediaRecorderRef.current.stop();
-        } catch (e) {
-          console.log("stopLiveMode: MediaRecorder already stopped");
-        }
-      }
+    // Immer processLiveSegment, wenn der Recorder läuft – erfasst auch den finalen Flush bei stop()
+    // (bei 0 Chunks liefert onstop die beim stop() geflushten Daten; zu kleine Blobs werden übersprungen)
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      console.log("stopLiveMode: Verarbeite letztes Segment (Chunks jetzt:", audioChunksRef.current.length, ")");
+      await processLiveSegment();
     }
     
     // Don't clear mediaRecorderRef here - processLiveSegment might still need it
@@ -1553,27 +1647,29 @@ export default function Home() {
   
   async function toggleLiveMode() {
     if (liveMode) {
-      // IMMEDIATELY update UI state - don't wait for async operations
+      // UI sofort umschalten, damit der Klick direkt "Verarbeitung" zeigt
       setLiveMode(false);
       setListening(false);
       setSilenceCountdown(null);
       setStatus("Beende Aufnahme...");
+      setIsProcessingAfterLiveStop(true);
+      isProcessingAfterLiveStopRef.current = true;
       
-      // Stop recording in background - don't block UI
-      stopLiveMode().then(async () => {
+      // stopLiveMode erst im nächsten Tick starten, damit React die setStates rendern kann
+      setTimeout(() => {
+        stopLiveMode().then(async () => {
         // Check if there are still items in the transcription queue
         const queueLength = transcriptionQueueRef.current.length;
         if (queueLength > 0 || isTranscribingRef.current) {
-          setStatus(`Transkribiere ${queueLength} Segment${queueLength !== 1 ? "e" : ""}...`);
+          setStatus(`Verarbeite Aufnahme (${queueLength} Segment${queueLength !== 1 ? "e" : ""} in Warteschlange)...`);
           
-          // Wait for transcription queue to finish in background
+          // Wait for transcription queue to finish in background (status updated by processTranscriptionQueue)
           const checkQueue = () => {
             return new Promise<void>((resolve) => {
               const check = () => {
                 if (transcriptionQueueRef.current.length === 0 && !isTranscribingRef.current) {
                   resolve();
                 } else {
-                  setStatus(`Transkribiere ${transcriptionQueueRef.current.length} Segment${transcriptionQueueRef.current.length !== 1 ? "e" : ""}...`);
                   setTimeout(check, 500);
                 }
               };
@@ -1583,6 +1679,10 @@ export default function Home() {
           
           await checkQueue();
         }
+        
+        // Verarbeitung abgeschlossen – Button kann wieder "Fortsetzen" oder "Live" zeigen
+        setIsProcessingAfterLiveStop(false);
+        isProcessingAfterLiveStopRef.current = false;
         
         // NOW save final project state - after all transcriptions are complete
         // Use a small delay to ensure all state updates have been processed
@@ -1602,6 +1702,7 @@ export default function Home() {
         setStatus("Fertig - Alle Segmente verarbeitet");
         setTimeout(() => setStatus("Bereit"), 2000);
       });
+      }, 0); // Nächster Tick: React kann Button-Update rendern, danach stopLiveMode
       
       return; // Don't continue to the else branch
     } else {
@@ -1756,9 +1857,9 @@ export default function Home() {
             setStatus("Sende an Whisper API...");
             console.log("stopWhisperRecording: Using Whisper API");
             
-            const apiKey = settings?.llmApiKey;
+            const apiKey = settings?.whisperApiKey?.trim();
             if (!apiKey) {
-              reject(new Error("OpenAI API Key erforderlich. Bitte in Einstellungen hinterlegen."));
+              reject(new Error("OpenAI API Key für Whisper fehlt. Bitte in Einstellungen → Spracherkennung eintragen."));
               return;
             }
             
@@ -2876,16 +2977,18 @@ Tipp: Prüfe ob https://www.google.com erreichbar ist.`;
               {/* Show Live button only if project has no Start/Stop text (or is empty or already Live) */}
               {(segments.length > 0 || transcript.trim().length === 0) && (
                 <button
-                  className={`record-btn live ${liveMode ? "recording" : ""}`}
+                  className={`record-btn live ${liveMode ? "recording" : ""} ${isProcessingAfterLiveStop ? "processing" : ""}`}
                   onClick={toggleLiveMode}
-                  disabled={listening && !liveMode}
-                  title={segments.length > 0 ? "Aufnahme fortsetzen" : "Live-Modus: Transkribiert kontinuierlich bei Sprechpausen"}
+                  disabled={(listening && !liveMode) || isProcessingAfterLiveStop}
+                  title={isProcessingAfterLiveStop ? "Verarbeitung läuft im Hintergrund" : segments.length > 0 ? "Aufnahme fortsetzen" : "Live-Modus: Transkribiert kontinuierlich bei Sprechpausen"}
                 >
                   {liveMode ? (
                     <>
                       <span className="pulse" />
                       Live Stop
                     </>
+                  ) : isProcessingAfterLiveStop ? (
+                    <>⏳ Verarbeitung</>
                   ) : segments.length > 0 ? (
                     <>🔴 Fortsetzen</>
                   ) : (
@@ -2908,19 +3011,24 @@ Tipp: Prüfe ob https://www.google.com erreichbar ist.`;
                 
                 {/* Segmented Transcript View with Audio Playback */}
                 {segments.length > 0 && !showSummaryView ? (
-                  <div className="segments-view">
+                  <div className="segments-view" ref={segmentsViewRef}>
                     {segments.map((segment) => {
                       const displayText = showNonSpeechTags ? segment.text : filterNonSpeechTags(segment.text);
                       const isPlaying = playingSegment === segment.id;
+                      const duration = Math.max(0, (segment.endTime || 0) - (segment.startTime || 0));
+                      const progress = duration > 0 && isPlaying
+                        ? Math.min(100, (currentAudioTime / duration) * 100)
+                        : 0;
                       
                       return (
                         <div
                           key={segment.id}
                           className={`segment-item ${isPlaying ? "playing" : ""} ${segment.isUncertain ? "uncertain" : ""}`}
+                          title={segment.isUncertain ? getUncertainTooltip(segment) : undefined}
                         >
                           <div className="segment-header">
-                            <span className="segment-time">
-                              {formatTime(segment.startTime)} - {formatTime(segment.endTime)}
+                            <span className="segment-time" title={`Dauer: ${formatTime(duration)}`}>
+                              {formatTime(duration)}
                             </span>
                             {segment.audioFile && (
                               <button
@@ -2931,8 +3039,27 @@ Tipp: Prüfe ob https://www.google.com erreichbar ist.`;
                                 {isPlaying ? "⏹" : "▶️"}
                               </button>
                             )}
+                            {segment.audioFile && (
+                              <input
+                                type="range"
+                                className="segment-progress"
+                                min={0}
+                                max={100}
+                                step={0.5}
+                                value={progress}
+                                disabled={!isPlaying}
+                                title={isPlaying ? "Scrubbing: Position ändern" : "Während der Wiedergabe scrubben"}
+                                onInput={(e) => {
+                                  if (!isPlaying || !audioPlayerRef.current) return;
+                                  const pct = Number((e.target as HTMLInputElement).value);
+                                  const t = (pct / 100) * duration;
+                                  audioPlayerRef.current.currentTime = t;
+                                  setCurrentAudioTime(t);
+                                }}
+                              />
+                            )}
                             {segment.isUncertain && (
-                              <span className="uncertain-badge" title="Unsichere Erkennung">❓</span>
+                              <span className="uncertain-badge" title={getUncertainTooltip(segment)}>❓</span>
                             )}
                           </div>
                           <div className="segment-text">
@@ -3565,6 +3692,20 @@ Platziere den Cursor und nimm auf, um Text einzufügen."
                     </select>
                   </div>
                 )}
+                {settings.sttProvider === "whisper-api" && (
+                  <div className="setting">
+                    <label>OpenAI API Key (für Whisper)</label>
+                    <input
+                      type="password"
+                      value={settings.whisperApiKey || ""}
+                      onChange={(e) => saveSettings({ whisperApiKey: e.target.value })}
+                      placeholder="sk-… (OpenAI API Key)"
+                    />
+                    <p className="hint">
+                      Wird nur für die Spracherkennung (Whisper) genutzt. Getrennt vom LLM-API-Key. Lokal gespeichert.
+                    </p>
+                  </div>
+                )}
                 <div className="setting">
                   <label>Sprache</label>
                   <input
@@ -3581,7 +3722,7 @@ Platziere den Cursor und nimm auf, um Text einzufügen."
                 </p>
               ) : settings.sttProvider === "whisper-api" ? (
                 <p className="hint success-hint">
-                  ✓ OpenAI Whisper API - Schnell und zuverlässig. Nutzt deinen OpenAI API Key (~0.5 Cent/Min).
+                  ✓ OpenAI Whisper API – schnell und zuverlässig. Nutzt den oben eingetragenen OpenAI API Key (~0.5 Cent/Min).
                 </p>
               ) : (
                 <p className="hint warning-hint">

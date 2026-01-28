@@ -13,6 +13,7 @@ export type Prompts = {
 
 export type AppSettings = {
   sttProvider: SttProvider;
+  whisperApiKey?: string;
   llmProvider: LlmProvider;
   llmModel: string;
   llmApiKey?: string;

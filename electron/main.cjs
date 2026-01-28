@@ -83,6 +83,7 @@ const store = new Store({
   defaults: {
     sttProvider: "whisper-local",
     whisperModel: "Xenova/whisper-base",
+    whisperApiKey: "",
     llmProvider: "ollama",
     llmModel: "llama3.2:3b",
     llmApiKey: "",
@@ -172,8 +173,30 @@ function createWindow(serverUrl) {
   console.log("Loading URL:", startUrl);
   mainWindow.loadURL(startUrl);
 
-  mainWindow.once("ready-to-show", () => {
+  let hasShown = false;
+  const showWindow = () => {
+    if (hasShown) return;
+    hasShown = true;
     mainWindow.show();
+  };
+
+  // Fallback: Fenster nach 10s anzeigen, falls ready-to-show nie kommt (hängender Renderer, weiße Seite, etc.)
+  const showTimeout = setTimeout(() => {
+    console.warn("ready-to-show did not fire within 10s, showing window anyway");
+    showWindow();
+  }, 10000);
+
+  mainWindow.once("ready-to-show", () => {
+    clearTimeout(showTimeout);
+    showWindow();
+  });
+
+  // Bei Load-Fehler (z.B. localhost:3000 nicht erreichbar): Fenster trotzdem anzeigen, Nutzer sieht Fehlerseite oder kann Reload versuchen
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (isMainFrame) {
+      console.error("Main frame failed to load:", errorCode, errorDescription, validatedURL);
+      showWindow();
+    }
   });
 
   mainWindow.on("closed", () => {
