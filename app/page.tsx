@@ -291,6 +291,10 @@ export default function Home() {
   const [ollamaSetupMessage, setOllamaSetupMessage] = useState<string>("");
   const [ollamaSetupSteps, setOllamaSetupSteps] = useState<string[]>([]);
   
+  // FFmpeg setup state (für Whisper lokal)
+  const [ffmpegStatus, setFfmpegStatus] = useState<"idle" | "checking" | "installed" | "missing" | "installing" | "error">("idle");
+  const [ffmpegMessage, setFfmpegMessage] = useState<string>("");
+  
   // LLM connection state
   const [llmConnected, setLlmConnected] = useState<boolean | null>(null); // null = not checked
 
@@ -328,7 +332,11 @@ export default function Home() {
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || "Audio conversion failed");
+      const msg = (errorData.error || "Audio conversion failed") as string;
+      if (typeof msg === "string" && (msg.includes("FFmpeg nicht gefunden") || msg.includes("FFmpeg not found"))) {
+        throw new Error("FFmpeg fehlt. Bitte in Einstellungen → Spracherkennung auf „FFmpeg einrichten“ klicken.");
+      }
+      throw new Error(msg);
     }
     
     const data = await response.json();
@@ -495,6 +503,13 @@ export default function Home() {
     loadSettings();
     loadProjects();
   }, []);
+
+  // FFmpeg-Status prüfen, wenn Einstellungen → Spracherkennung mit Whisper lokal
+  useEffect(() => {
+    if (activeTab === "settings" && settings?.sttProvider === "whisper-local") {
+      checkFFmpeg();
+    }
+  }, [activeTab, settings?.sttProvider]);
 
   // Bei neuem Segment nach unten scrollen (Live-Modus)
   useEffect(() => {
@@ -1591,6 +1606,7 @@ export default function Home() {
         
       } catch (err) {
         console.error("processTranscriptionQueue: Error processing segment", item.segmentIndex, err);
+        setError((err as Error).message);
       }
     }
     
@@ -2333,6 +2349,43 @@ export default function Home() {
       return data;
     } catch {
       return { installed: false, running: false };
+    }
+  }
+
+  async function checkFFmpeg() {
+    setFfmpegStatus("checking");
+    setFfmpegMessage("");
+    try {
+      const res = await fetch("/api/ffmpeg-setup", { method: "GET" });
+      const data = await res.json();
+      setFfmpegStatus(data.installed ? "installed" : "missing");
+      return data.installed;
+    } catch {
+      setFfmpegStatus("missing");
+      return false;
+    }
+  }
+
+  async function setupFFmpeg() {
+    setFfmpegStatus("installing");
+    setFfmpegMessage("Installiere FFmpeg...");
+    try {
+      const res = await fetch("/api/ffmpeg-setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "install" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setFfmpegStatus("installed");
+        setFfmpegMessage(data.message || "FFmpeg installiert.");
+      } else {
+        setFfmpegStatus("error");
+        setFfmpegMessage(data.message || "Installation fehlgeschlagen.");
+      }
+    } catch (err) {
+      setFfmpegStatus("error");
+      setFfmpegMessage("Installation fehlgeschlagen. Bitte manuell: brew install ffmpeg");
     }
   }
 
@@ -3690,6 +3743,29 @@ Platziere den Cursor und nimm auf, um Text einzufügen."
                       <option value="Xenova/whisper-base">Base (~150MB, ausgewogen)</option>
                       <option value="Xenova/whisper-small">Small (~500MB, genauer)</option>
                     </select>
+                  </div>
+                )}
+                {settings.sttProvider === "whisper-local" && (
+                  <div className="setting ffmpeg-setting">
+                    <label>FFmpeg (Audio-Konvertierung)</label>
+                    {ffmpegStatus === "checking" && <p className="hint">Prüfe…</p>}
+                    {ffmpegStatus === "installed" && <p className="hint success-hint">✓ FFmpeg gefunden</p>}
+                    {(ffmpegStatus === "missing" || ffmpegStatus === "error" || ffmpegStatus === "installing") && (
+                      <>
+                        <p className="hint">
+                          {ffmpegStatus === "installing" ? ffmpegMessage || "Installiere…" : "Wird für Whisper lokal benötigt. Nicht installiert? Ein Klick genügt."}
+                        </p>
+                        <button
+                          type="button"
+                          className={`btn ${ffmpegStatus === "error" ? "" : "primary"}`}
+                          onClick={setupFFmpeg}
+                          disabled={ffmpegStatus === "installing"}
+                        >
+                          {ffmpegStatus === "installing" ? "⏳ Installiere…" : "🔧 FFmpeg einrichten"}
+                        </button>
+                      </>
+                    )}
+                    {ffmpegStatus === "error" && ffmpegMessage && <p className="hint error-hint">{ffmpegMessage}</p>}
                   </div>
                 )}
                 {settings.sttProvider === "whisper-api" && (

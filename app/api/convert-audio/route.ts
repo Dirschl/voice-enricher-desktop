@@ -4,37 +4,9 @@ import { promisify } from "util";
 import { writeFile, unlink, readFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { findFFmpeg } from "../../../lib/ffmpeg";
 
 const execAsync = promisify(exec);
-
-// Check if FFmpeg is available (cross-platform)
-async function findFFmpeg(): Promise<string | null> {
-  const isWindows = process.platform === "win32";
-  
-  const paths = isWindows
-    ? [
-        "ffmpeg",
-        "C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe",
-        "C:\\ffmpeg\\bin\\ffmpeg.exe",
-        "C:\\Program Files (x86)\\ffmpeg\\bin\\ffmpeg.exe",
-      ]
-    : [
-        "ffmpeg",
-        "/usr/local/bin/ffmpeg",
-        "/opt/homebrew/bin/ffmpeg",
-        "/usr/bin/ffmpeg",
-      ];
-  
-  for (const ffmpegPath of paths) {
-    try {
-      await execAsync(`"${ffmpegPath}" -version`);
-      return ffmpegPath;
-    } catch {
-      // Try next path
-    }
-  }
-  return null;
-}
 
 export async function POST(req: NextRequest) {
   const inputPath = join(tmpdir(), `input-${Date.now()}.webm`);

@@ -15,7 +15,7 @@ Eine Desktop-App, die gesprochene Worte in aufbereitete Texte verwandelt. Sprach
 | **macOS (Apple Silicon)** | [Releases](https://github.com/Dirschl/voice-enricher-desktop/releases) → `Voice Enricher-*-arm64.dmg` herunterladen, öffnen, App in „Programme“ ziehen |
 
 - **Ollama** (lokal, empfohlen für KI): [ollama.com](https://ollama.com) installieren, dann z.B. `ollama pull llama3.2:3b`
-- **FFmpeg** wird für die Audio-Konvertierung benötigt: `brew install ffmpeg` (macOS)
+- **FFmpeg** (für Whisper lokal): In der App unter **Einstellungen → Spracherkennung** auf **„FFmpeg einrichten“** klicken (macOS: Homebrew, Windows: winget). Oder manuell: `brew install ffmpeg` (macOS)
 
 ---
 
@@ -361,11 +361,10 @@ voice-enricher-desktop/
 
 ### FFmpeg nicht gefunden
 
-**macOS:**
-```bash
-brew install ffmpeg
-which ffmpeg  # sollte /usr/local/bin/ffmpeg oder /opt/homebrew/bin/ffmpeg zeigen
-```
+**In der App:** Einstellungen → Spracherkennung (bei „Whisper lokal“) → **„FFmpeg einrichten“** (Installation per Homebrew/winget/apt).
+
+**Manuell:**
+**macOS:** `brew install ffmpeg` (oder `/opt/homebrew/bin/ffmpeg`, `/usr/local/bin/ffmpeg`)
 
 **Windows:**
 ```powershell
