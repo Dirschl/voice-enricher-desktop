@@ -42,6 +42,11 @@ next-env.d.ts
 *.AppImage
 *.blockmap
 
+# FFmpeg-Binaries (zu groß für GitHub; vor Build: npm run download-ffmpeg)
+/resources/ffmpeg/mac/ffmpeg
+/resources/ffmpeg/win/ffmpeg.exe
+/resources/ffmpeg/linux/ffmpeg
+
 # IDE
 .vscode
 .idea

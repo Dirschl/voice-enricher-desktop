@@ -15,7 +15,7 @@ Eine Desktop-App, die gesprochene Worte in aufbereitete Texte verwandelt. Sprach
 | **macOS (Apple Silicon)** | [Releases](https://github.com/Dirschl/voice-enricher-desktop/releases) → `Voice Enricher-*-arm64.dmg` herunterladen, öffnen, App in „Programme“ ziehen |
 
 - **Ollama** (lokal, empfohlen für KI): [ollama.com](https://ollama.com) installieren, dann z.B. `ollama pull llama3.2:3b`
-- **FFmpeg** (für Whisper lokal): In der App unter **Einstellungen → Spracherkennung** auf **„FFmpeg einrichten“** klicken (macOS: Homebrew, Windows: winget). Oder manuell: `brew install ffmpeg` (macOS)
+- **FFmpeg** (für Whisper lokal): **In der App mitgeliefert** – keine Extra-Installation nötig. Optional: In **Einstellungen → Spracherkennung** unter „FFmpeg einrichten“ eine systemweite Installation hinzufügen.
 
 ---
 
@@ -90,7 +90,7 @@ Eine Desktop-App, die gesprochene Worte in aufbereitete Texte verwandelt. Sprach
 | Software | macOS | Windows | Linux |
 |----------|-------|---------|-------|
 | **Node.js** | v18+ | v18+ | v18+ |
-| **FFmpeg** | `brew install ffmpeg` | `winget install ffmpeg` | `apt install ffmpeg` |
+| **FFmpeg** | in App enthalten; für Build: `npm run download-ffmpeg` | in App enthalten; für Build: `npm run download-ffmpeg` | in App enthalten; für Build: `npm run download-ffmpeg` |
 | **Ollama** | [Download](https://ollama.com/download) | [Download](https://ollama.com/download/windows) | [Install Script](https://ollama.com/download/linux) |
 
 ---
@@ -101,20 +101,18 @@ Eine Desktop-App, die gesprochene Worte in aufbereitete Texte verwandelt. Sprach
 # 1. Homebrew installieren (falls nicht vorhanden)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# 2. FFmpeg installieren
-brew install ffmpeg
-
-# 3. Ollama installieren
+# 2. Ollama installieren
 brew install ollama
 # Oder: Download von https://ollama.com/download
 
-# 4. Ollama Modell laden
+# 3. Ollama Modell laden
 ollama pull llama3.2:3b
 
-# 5. Repository klonen und starten
+# 4. Repository klonen und starten
 git clone https://github.com/Dirschl/voice-enricher-desktop.git
 cd voice-enricher-desktop
 npm install
+npm run download-ffmpeg   # FFmpeg-Binaries für Dev/Build (resources/ffmpeg)
 npm run dev
 ```
 
@@ -132,27 +130,18 @@ Oder vorkompilierte **Releases** von [GitHub](https://github.com/Dirschl/voice-e
 ### Windows
 
 ```powershell
-# 1. FFmpeg installieren (Option A: winget)
-winget install ffmpeg
-
-# 1. FFmpeg installieren (Option B: Chocolatey)
-choco install ffmpeg
-
-# 1. FFmpeg installieren (Option C: Manuell)
-# Download von https://ffmpeg.org/download.html
-# Entpacken nach C:\ffmpeg und zu PATH hinzufügen
-
-# 2. Ollama installieren
+# 1. Ollama installieren
 # Download von https://ollama.com/download/windows
 # Installer ausführen
 
-# 3. Ollama Modell laden
+# 2. Ollama Modell laden
 ollama pull llama3.2:3b
 
-# 4. Repository klonen und starten
+# 3. Repository klonen und starten
 git clone https://github.com/Dirschl/voice-enricher-desktop.git
 cd voice-enricher-desktop
 npm install
+npm run download-ffmpeg   # FFmpeg-Binaries für Dev/Build (resources/ffmpeg)
 npm run dev
 ```
 
@@ -164,20 +153,17 @@ Oder [Releases](https://github.com/Dirschl/voice-enricher-desktop/releases) (Win
 ### Linux (Ubuntu/Debian)
 
 ```bash
-# 1. FFmpeg installieren
-sudo apt update
-sudo apt install ffmpeg
-
-# 2. Ollama installieren
+# 1. Ollama installieren
 curl -fsSL https://ollama.com/install.sh | sh
 
-# 3. Ollama Modell laden
+# 2. Ollama Modell laden
 ollama pull llama3.2:3b
 
-# 4. Repository klonen und starten
+# 3. Repository klonen und starten
 git clone https://github.com/Dirschl/voice-enricher-desktop.git
 cd voice-enricher-desktop
 npm install
+npm run download-ffmpeg   # FFmpeg-Binaries für Dev/Build (resources/ffmpeg)
 npm run dev
 ```
 
@@ -361,9 +347,11 @@ voice-enricher-desktop/
 
 ### FFmpeg nicht gefunden
 
-**In der App:** Einstellungen → Spracherkennung (bei „Whisper lokal“) → **„FFmpeg einrichten“** (Installation per Homebrew/winget/apt).
+FFmpeg ist in der App enthalten; der Fehler sollte nur bei kaputtem Build oder älteren Versionen auftreten.
 
-**Manuell:**
+**In der App:** Einstellungen → Spracherkennung (bei „Whisper lokal“) → **„FFmpeg einrichten“** (Installation per Homebrew/winget/apt). Die App verwendet danach die systemweite Installation.
+
+**Manuell (Fallback):**
 **macOS:** `brew install ffmpeg` (oder `/opt/homebrew/bin/ffmpeg`, `/usr/local/bin/ffmpeg`)
 
 **Windows:**
