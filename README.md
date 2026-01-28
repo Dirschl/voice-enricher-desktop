@@ -2,9 +2,20 @@
 
 **Sprache zu strukturierten Texten – lokal, privat und flexibel.**
 
-Eine Desktop-App, die gesprochene Worte in aufbereitete Texte verwandelt. Nutzt lokale KI (Ollama) oder Cloud-Dienste (Gemini, OpenAI, OpenRouter).
+Eine Desktop-App, die gesprochene Worte in aufbereitete Texte verwandelt. Spracherkennung und KI-Aufbereitung sind getrennt wählbar: lokal (Whisper, Ollama) oder über Cloud-APIs (OpenAI Whisper, Gemini, OpenAI, OpenRouter).
 
 **Erstellt von Johann Dirschl** – [www.dirschl.com](https://www.dirschl.com)
+
+---
+
+## Schnellstart (Fertige App)
+
+| Plattform | Download |
+|-----------|----------|
+| **macOS (Apple Silicon)** | [Releases](https://github.com/Dirschl/voice-enricher-desktop/releases) → `Voice Enricher-*-arm64.dmg` herunterladen, öffnen, App in „Programme“ ziehen |
+
+- **Ollama** (lokal, empfohlen für KI): [ollama.com](https://ollama.com) installieren, dann z.B. `ollama pull llama3.2:3b`
+- **FFmpeg** wird für die Audio-Konvertierung benötigt: `brew install ffmpeg` (macOS)
 
 ---
 
@@ -47,6 +58,7 @@ Eine Desktop-App, die gesprochene Worte in aufbereitete Texte verwandelt. Nutzt 
 - Audio-Dateien werden im Projektordner gespeichert
 - Nachträgliches Anhören zur Korrektur möglich
 - Nicht-Sprach-Tags (z.B. [Musik], [Applaus], [Aufregung]) werden automatisch erkannt und immer angezeigt
+- **Unsicher-Markierung (❓):** Segmente mit möglicherweise unsicherer Erkennung (wenige Wörter, Pausen, Dehnungen) sind rot markiert; Tooltip über dem ❓ erklärt den Grund
 
 ### KI-Aufbereitung
 
@@ -100,18 +112,20 @@ brew install ollama
 ollama pull llama3.2:3b
 
 # 5. Repository klonen und starten
-git clone <repo-url>
+git clone https://github.com/Dirschl/voice-enricher-desktop.git
 cd voice-enricher-desktop
 npm install
 npm run dev
 ```
 
-**Fertige App nutzen:**
+**Fertige App aus dem Quellcode:**
 ```bash
 npm run dist:mac
-# → dist/Voice Enricher-1.0.0-arm64.dmg
-# DMG öffnen und App in Applications ziehen
+# → dist/Voice Enricher-<Version>-arm64.dmg (Apple Silicon)
+# DMG öffnen und App in „Programme“ ziehen
 ```
+
+Oder vorkompilierte **Releases** von [GitHub](https://github.com/Dirschl/voice-enricher-desktop/releases) herunterladen.
 
 ---
 
@@ -136,18 +150,14 @@ choco install ffmpeg
 ollama pull llama3.2:3b
 
 # 4. Repository klonen und starten
-git clone <repo-url>
+git clone https://github.com/Dirschl/voice-enricher-desktop.git
 cd voice-enricher-desktop
 npm install
 npm run dev
 ```
 
-**Fertige App erstellen:**
-```powershell
-npm run dist:win
-# → dist/Voice Enricher Setup 1.0.0.exe (Installer)
-# → dist/Voice Enricher 1.0.0.exe (Portable)
-```
+**Fertige App erstellen:** `npm run dist:win` → `dist/` (Installer + Portable).  
+Oder [Releases](https://github.com/Dirschl/voice-enricher-desktop/releases) (Windows-Builds, falls vorhanden).
 
 ---
 
@@ -165,18 +175,14 @@ curl -fsSL https://ollama.com/install.sh | sh
 ollama pull llama3.2:3b
 
 # 4. Repository klonen und starten
-git clone <repo-url>
+git clone https://github.com/Dirschl/voice-enricher-desktop.git
 cd voice-enricher-desktop
 npm install
 npm run dev
 ```
 
-**Fertige App erstellen:**
-```bash
-npm run dist:linux
-# → dist/Voice Enricher-1.0.0.AppImage
-# → dist/voice-enricher-desktop_1.0.0_amd64.deb
-```
+**Fertige App erstellen:** `npm run dist:linux` → `dist/` (AppImage, .deb).  
+Oder [Releases](https://github.com/Dirschl/voice-enricher-desktop/releases) (Linux-Builds, falls vorhanden).
 
 ---
 
@@ -227,7 +233,19 @@ npm run dist:linux
 
 ## Einstellungen
 
-### KI-Provider
+### Spracherkennung (STT)
+
+Spracherkennung und KI-Aufbereitung sind **unabhängig** wählbar – du kannst z.B. Whisper lokal und Ollama für die KI nutzen.
+
+| Provider | Beschreibung | API-Key |
+|----------|--------------|---------|
+| **Whisper lokal** | Läuft offline (@xenova/transformers). Modelle: Tiny, Base, Small. | – |
+| **Whisper API (OpenAI)** | Schnell, gut, ~0,5 Cent/Min. Für Start/Stop und Live-Modus. | OpenAI-Key in Einstellungen → Spracherkennung |
+| **Web Speech API** | Kostenlos, benötigt Internet (Google). Instabil. | – |
+
+Der **Whisper-API-Key** ist getrennt vom **LLM-API-Key** (Gemini/OpenAI/OpenRouter).
+
+### KI-Provider (LLM)
 
 | Provider | Kosten | Qualität | Datenschutz |
 |----------|--------|----------|-------------|
@@ -235,6 +253,8 @@ npm run dist:linux
 | **Google Gemini** | Pay-per-use | Sehr gut | Cloud |
 | **OpenAI** | Pay-per-use | Exzellent | Cloud |
 | **OpenRouter** | Pay-per-use | Variabel | Cloud |
+
+Für Gemini, OpenAI und OpenRouter wird der **LLM-API-Key** in Einstellungen → KI-Provider eingetragen (nur sichtbar, wenn der entsprechende Provider gewählt ist).
 
 ### Modellauswahl
 
@@ -267,18 +287,18 @@ npm run dist:linux
 
 ## Build & Distribution
 
-```bash
-# Development
-npm run dev
+**Vorkompilierte Versionen:** [GitHub Releases](https://github.com/Dirschl/voice-enricher-desktop/releases) (macOS Apple Silicon: .dmg, .zip).
 
-# Production Build
-npm run dist        # Für aktuelles OS
-npm run dist:mac    # macOS (.dmg, .zip)
-npm run dist:win    # Windows (.exe)
-npm run dist:linux  # Linux (.AppImage, .deb)
+**Selbst bauen:**
+```bash
+npm run dev          # Development
+npm run dist         # Für aktuelles OS
+npm run dist:mac     # macOS (.dmg, .zip)
+npm run dist:win     # Windows (.exe)
+npm run dist:linux   # Linux (.AppImage, .deb)
 ```
 
-Fertige Installer im `dist/` Ordner.
+Fertige Artefakte im Ordner `dist/`.
 
 ---
 
@@ -288,13 +308,16 @@ Fertige Installer im `dist/` Ordner.
 voice-enricher-desktop/
 ├── app/                    # Next.js Frontend
 │   ├── page.tsx            # Hauptkomponente
-│   ├── api/enrich/         # KI-API Route
-│   ├── api/transcribe/     # Whisper-API Route
+│   ├── api/enrich/         # KI-API (Ollama, Gemini, OpenAI, OpenRouter)
+│   ├── api/transcribe/     # Whisper-API (OpenAI)
+│   ├── api/convert-audio/  # Audio → Float32 (FFmpeg)
+│   ├── api/ollama-setup/   # Ollama-Installation & Modell-Pull
 │   └── globals.css         # Styling
 ├── electron/
 │   ├── main.cjs            # Electron Main Process
 │   └── preload.cjs         # IPC Bridge
-├── Transcriptions/         # Projektordner (Standard)
+├── build/                  # Icons, Entitlements (für Signing/Build)
+├── Transcriptions/         # Projektordner (Standard, wird angelegt)
 └── package.json
 ```
 
@@ -302,14 +325,24 @@ voice-enricher-desktop/
 
 - **Electron**: Desktop-App mit globalem Hotkey
 - **Next.js**: React UI + API Routes
-- **Whisper**: Lokale Spracherkennung (@xenova/transformers)
-- **Web Speech API**: Alternative Spracherkennung
+- **Whisper**: Lokale Spracherkennung (@xenova/transformers) oder OpenAI Whisper API
+- **Web Speech API**: Alternative Spracherkennung (optional)
 - **electron-store**: Lokale Einstellungen
 - **FFmpeg**: Audio-Konvertierung
 
 ---
 
 ## Troubleshooting
+
+### App startet nicht / Fenster bleibt unsichtbar
+
+- Das Fenster erscheint spätestens nach **10 Sekunden** (Timeout-Fallback). Bei Load-Fehlern (z.B. Port 3000 belegt) wird es sofort angezeigt.
+- **View → Reload** (oder `Cmd+R`) nach Fehlern oder weißer Seite.
+- Im **Dev-Modus** (`npm run dev`): Erst warten, bis Next.js „Ready“ meldet, dann startet Electron. Bei `EADDRINUSE` auf Port 3000: anderen Prozess beenden oder Port ändern.
+
+### „OpenAI API Key für Whisper fehlt“
+
+- Wenn **Whisper API (OpenAI)** als Spracherkennung gewählt ist: In **Einstellungen → Spracherkennung** das Feld **„OpenAI API Key (für Whisper)“** ausfüllen. Dieser Key ist getrennt vom LLM-API-Key.
 
 ### Mikrofon funktioniert nicht
 
